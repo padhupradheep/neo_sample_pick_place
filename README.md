@@ -6,7 +6,9 @@ Install the basic moveit packages.
 Create a catkin workspace
 
 Clone this repo.
+
 Clone the repo: https://github.com/padhupradheep/neo_moveit_mmo700
+
 Clone the moveit config repo: https://github.com/padhupradheep/neo_moveit_mmo700
 
 You are set to go.
