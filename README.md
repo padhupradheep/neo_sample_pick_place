@@ -7,7 +7,7 @@ Create a catkin workspace
 
 Clone this repo.
 
-Clone the repo: https://github.com/padhupradheep/neo_moveit_mmo700
+Clone the neo_simulation repo: https://github.com/neobotix/neo_simulation
 
 Clone the moveit config repo: https://github.com/padhupradheep/neo_moveit_mmo700
 
