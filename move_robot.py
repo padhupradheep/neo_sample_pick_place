@@ -37,6 +37,7 @@ from moveit_commander import RobotCommander, MoveGroupCommander
 from moveit_commander import PlanningSceneInterface, roscpp_initialize, roscpp_shutdown
 from trajectory_msgs.msg import JointTrajectoryPoint
 from moveit_commander.conversions import pose_to_list
+from nav_msgs.msg import Odometry
 import tf.transformations
 import numpy as np
 
@@ -58,6 +59,10 @@ class Manipulation():
 		self.display_trajectory_publisher = rospy.Publisher('/move_group/display_planned_path',
 										  moveit_msgs.msg.DisplayTrajectory)
 		self.display_trajectory = moveit_msgs.msg.DisplayTrajectory()
+		self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
+		self.move_x = 0
+		self.move_y = 0
+
 
 	def transform_calculate(self, obj, base):
 		obj_trans = np.dot(tf.transformations.translation_matrix((obj.pose.position.x, obj.pose.position.y, obj.pose.position.z)), tf.transformations.quaternion_matrix([obj.pose.orientation.x, obj.pose.orientation.y, obj.pose.orientation.z, obj.pose.orientation.w]))
@@ -112,7 +117,6 @@ class Manipulation():
 		group.go()
 		self.gripper.set_named_target("close")
 		self.gripper.go()
-		rospy.sleep(8)
 		self.group.set_named_target("initial")
 		self.group.go()
 
@@ -148,6 +152,7 @@ class Manipulation():
 		group.go()
 		self.gripper.set_named_target("open")
 		self.gripper.go()
+		rospy.sleep(20)
 		self.group.set_named_target("initial")
 		self.group.go()
 		moveit_commander.roscpp_shutdown()
@@ -155,9 +160,8 @@ class Manipulation():
 
 
 
-	def movebase_client(self):
-		client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
-		while not client.wait_for_server(rospy.Duration(5)):
+	def movebase_client_pre_place(self):
+		while not self.client.wait_for_server(rospy.Duration(5)):
 			rospy.loginfo("Waiting for the move_base action server to come up")
 
 		goal = MoveBaseGoal()
@@ -166,15 +170,42 @@ class Manipulation():
 		goal.target_pose.pose.position.x = self.pose_x+ 0.75
 		goal.target_pose.pose.position.y = self.pose_y
 		goal.target_pose.pose.position.z = self.pose_z
-		goal.target_pose.pose.orientation.w = 3.14
+		# goal.target_pose.pose.orientation.x = 0.0
+		# goal.target_pose.pose.orientation.y =0
+		# goal.target_pose.pose.orientation.z =0
+		goal.target_pose.pose.orientation.w =1
 		
-		client.send_goal(goal)
-		wait = client.wait_for_result()
+		self.client.send_goal(goal)
+		wait = self.client.wait_for_result()
 		if not wait:
 			rospy.logerr("Action server not available!")
 			rospy.signal_shutdown("Action server not available!")
 		else:
-			return client.get_result()
+			return self.client.get_result()
+
+	def callback(self,msgs):
+		self.move_x = msgs.pose.pose.position.x
+		self.move_y = msgs.pose.pose.position.y
+
+	def movebase_client_post_place(self):
+		while not self.client.wait_for_server(rospy.Duration(5)):
+			rospy.loginfo("Waiting for the move_base action server to come up")
+		goal = MoveBaseGoal()
+		goal.target_pose.header.frame_id = "map"
+		goal.target_pose.header.stamp = rospy.Time.now()
+		goal.target_pose.pose.position.x = self.pose_x+3.5
+		goal.target_pose.pose.position.y = self.pose_y
+		goal.target_pose.pose.orientation.w =1
+		
+		self.client.send_goal(goal)
+		wait = self.client.wait_for_result()
+		if not wait:
+			rospy.logerr("Action server not available!")
+			rospy.signal_shutdown("Action server not available!")
+		else:
+			return self.client.get_result()
+
+
 
 
 def main():
@@ -190,14 +221,15 @@ def main():
 	manip1 = Manipulation(current_model_state_table)
 	flag = 0
 
-	while not rospy.is_shutdown():
+	while not rospy.is_shutdown() and flag!=1:
 		trans = manip.transform_calculate(current_model_state, current_model_state_robot)
 		manip.move_group_pick(compute_ik, trans)
-		result = manip1.movebase_client()
-		if(result):
-			trans1 = manip1.transform_calculate(current_model_state_table, current_model_state_robot)
-			manip1.move_group_place(compute_ik, trans1) 
-			flag = 1
+		result = manip1.movebase_client_pre_place()
+		trans1 = manip1.transform_calculate(current_model_state_table, current_model_state_robot)
+		manip1.move_group_place(compute_ik, trans1)
+		rospy.Subscriber("odom", Odometry, manip1.callback)
+		manip1.movebase_client_post_place()
+		flag = 1
 
 if __name__=='__main__':
 	main()
