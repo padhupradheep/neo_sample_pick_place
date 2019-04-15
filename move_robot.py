@@ -40,6 +40,10 @@ from moveit_commander.conversions import pose_to_list
 from nav_msgs.msg import Odometry
 import tf.transformations
 import numpy as np
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from std_srvs.srv import Empty
+
+
 
 class Manipulation():
 	def __init__(self, model_state):
@@ -62,9 +66,25 @@ class Manipulation():
 		self.client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
 		self.move_x = 0
 		self.move_y = 0
-
+		self.pub_initial_pose = rospy.Publisher('/initialpose', PoseWithCovarianceStamped, queue_size=10)
+		self.robot_initial_pose = PoseWithCovarianceStamped()
+		self.robot_initial_pose.header.stamp = rospy.get_rostime()
+		self.robot_initial_pose.header.frame_id = "map"
+		#position
+		self.robot_initial_pose.pose.pose.position.x = 0.0
+		self.robot_initial_pose.pose.pose.position.y = 0.0
+		self.robot_initial_pose.pose.pose.position.z = 0.0
+		#orientation as quaternion
+		self.robot_initial_pose.pose.pose.orientation.x = 0.0
+		self.robot_initial_pose.pose.pose.orientation.y = 0.0
+		self.robot_initial_pose.pose.pose.orientation.z = 0.0
+		self.robot_initial_pose.pose.pose.orientation.w = 1.0
+		self.robot_initial_pose.pose.covariance = (0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1)
+		self.robot_initial_pose.header.stamp = rospy.get_rostime()
+		self.pub_initial_pose.publish(self.robot_initial_pose)
 
 	def transform_calculate(self, obj, base):
+
 		obj_trans = np.dot(tf.transformations.translation_matrix((obj.pose.position.x, obj.pose.position.y, obj.pose.position.z)), tf.transformations.quaternion_matrix([obj.pose.orientation.x, obj.pose.orientation.y, obj.pose.orientation.z, obj.pose.orientation.w]))
 		base_trans = np.dot(tf.transformations.translation_matrix((base.pose.position.x, base.pose.position.y, base.pose.position.z)), tf.transformations.quaternion_matrix([base.pose.orientation.x, base.pose.orientation.y, base.pose.orientation.z, obj.pose.orientation.w]))
 		result_trans = np.dot(tf.transformations.inverse_matrix(base_trans), obj_trans)
@@ -83,27 +103,27 @@ class Manipulation():
 		t.orientation.z = orientation[2]
 		t.orientation.w = orientation[3] 
 		# With this function, we will be able t achieve the pre grasp position 
-		scene = PlanningSceneInterface()
-		p = PoseStamped()
-		start = rospy.get_time()
-		seconds = rospy.get_time()
-		box_name = "obj1"
-		while (seconds - start < 5) and not rospy.is_shutdown():
-		  # Test if the box is in attached objects
-		  attached_objects = scene.get_attached_objects([box_name])
-		  is_attached = len(attached_objects.keys()) > 0
-		  is_known = box_name in scene.get_known_object_names()
-		  seconds = rospy.get_time()
+		# scene = PlanningSceneInterface()
+		# p = PoseStamped()
+		# start = rospy.get_time()
+		# seconds = rospy.get_time()
+		# box_name = "obj1"
+		# while (seconds - start < 5) and not rospy.is_shutdown():
+		#   # Test if the box is in attached objects
+		#   attached_objects = scene.get_attached_objects([box_name])
+		#   is_attached = len(attached_objects.keys()) > 0
+		#   is_known = box_name in scene.get_known_object_names()
+		#   seconds = rospy.get_time()
 		self.group.set_named_target("initial")
 		self.group.go()
 		request = GetPositionIKRequest()
 		request.ik_request.group_name = "arm"
 		request.ik_request.ik_link_name = "wrist_3_link"
 		request.ik_request.attempts = 20
-	    #request.ik_request.pose_stamped.header.frame_id = "base"
+		#request.ik_request.pose_stamped.header.frame_id = "base"
 		request.ik_request.pose_stamped.header.frame_id = "ur10_base_link"
-	    
-	    #Set the desired orientation for the end effector HERE
+		
+		#Set the desired orientation for the end effector HERE
 		request.ik_request.pose_stamped.pose.position.x = t.position.x -0.2
 		request.ik_request.pose_stamped.pose.position.y = t.position.y 
 		request.ik_request.pose_stamped.pose.position.z = t.position.z -0.4
@@ -137,9 +157,9 @@ class Manipulation():
 		request1.ik_request.attempts = 20
 		request1.ik_request.pose_stamped.header.frame_id = "ur10_base_link"
 		print(t1.position.x,t1.position.y,t1.position.z)
-		request1.ik_request.pose_stamped.pose.position.x = t1.position.x 
-		request1.ik_request.pose_stamped.pose.position.y = t1.position.y 
-		request1.ik_request.pose_stamped.pose.position.z = t1.position.z 
+		request1.ik_request.pose_stamped.pose.position.x = t1.position.x  
+		request1.ik_request.pose_stamped.pose.position.y = t1.position.y +0.2
+		request1.ik_request.pose_stamped.pose.position.z = t1.position.z +0.5
 		request1.ik_request.pose_stamped.pose.orientation.x = -0.707
 		request1.ik_request.pose_stamped.pose.orientation.y = 0 
 		request1.ik_request.pose_stamped.pose.orientation.z = 0
@@ -148,11 +168,11 @@ class Manipulation():
 		group = self.group
 		group.set_pose_target(request1.ik_request.pose_stamped)
 		group.go()
-		self.group.set_named_target("finish")
+		self.group.set_named_target("finish1")
 		group.go()
 		self.gripper.set_named_target("open")
 		self.gripper.go()
-		rospy.sleep(20)
+		rospy.sleep(30)
 		self.group.set_named_target("initial")
 		self.group.go()
 		moveit_commander.roscpp_shutdown()
@@ -167,13 +187,13 @@ class Manipulation():
 		goal = MoveBaseGoal()
 		goal.target_pose.header.frame_id = "map"
 		goal.target_pose.header.stamp = rospy.Time.now()
-		goal.target_pose.pose.position.x = self.pose_x+ 0.75
+		goal.target_pose.pose.position.x = self.pose_x+ 1.
 		goal.target_pose.pose.position.y = self.pose_y
 		goal.target_pose.pose.position.z = self.pose_z
-		# goal.target_pose.pose.orientation.x = 0.0
-		# goal.target_pose.pose.orientation.y =0
-		# goal.target_pose.pose.orientation.z =0
-		goal.target_pose.pose.orientation.w =1
+		goal.target_pose.pose.orientation.x = 0.
+		goal.target_pose.pose.orientation.y = 0
+		goal.target_pose.pose.orientation.z = -0.8509035
+		goal.target_pose.pose.orientation.w = 0.8509035
 		
 		self.client.send_goal(goal)
 		wait = self.client.wait_for_result()
@@ -211,9 +231,28 @@ class Manipulation():
 def main():
 	roscpp_initialize(sys.argv)
 	rospy.init_node('move_group_python_interface', anonymous=True)
+	reset_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
 	get_model_state = rospy.ServiceProxy("/gazebo/get_model_state", GetModelState)
+	pub_initial_pose = rospy.Publisher('/initialpose', PoseWithCovarianceStamped, queue_size=10)
+	robot_initial_pose = PoseWithCovarianceStamped()
+	robot_initial_pose.header.stamp = rospy.get_rostime()
+	robot_initial_pose.header.frame_id = "map"
+	#position
+	robot_initial_pose.pose.pose.position.x = 0.0
+	robot_initial_pose.pose.pose.position.y = 0.0
+	robot_initial_pose.pose.pose.position.z = 0.0
+	#orientation as quaternion
+	robot_initial_pose.pose.pose.orientation.x = 0.0
+	robot_initial_pose.pose.pose.orientation.y = 0.0
+	robot_initial_pose.pose.pose.orientation.z = 0.0
+	robot_initial_pose.pose.pose.orientation.w = 1.0
+	robot_initial_pose.pose.covariance = (0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1)
+	robot_initial_pose.header.stamp = rospy.get_rostime()
+	pub_initial_pose.publish(robot_initial_pose)
 	compute_ik = rospy.ServiceProxy('compute_ik', GetPositionIK)
 	rospy.wait_for_service("/gazebo/get_model_state")
+	rospy.wait_for_service("/gazebo/reset_world")
+	reset_proxy()
 	current_model_state = get_model_state('coke_can','world')
 	current_model_state_robot = get_model_state('mmo_700','world')
 	current_model_state_table = get_model_state('cafe_table','world')
@@ -224,7 +263,7 @@ def main():
 	while not rospy.is_shutdown() and flag!=1:
 		trans = manip.transform_calculate(current_model_state, current_model_state_robot)
 		manip.move_group_pick(compute_ik, trans)
-		result = manip1.movebase_client_pre_place()
+		manip1.movebase_client_pre_place()
 		trans1 = manip1.transform_calculate(current_model_state_table, current_model_state_robot)
 		manip1.move_group_place(compute_ik, trans1)
 		rospy.Subscriber("odom", Odometry, manip1.callback)
